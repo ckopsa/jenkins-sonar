@@ -17,5 +17,19 @@ pipeline {
                 sh 'mvn verify -e -Dmaven.test.failure.ignore=false'
             }
         }
+        stage('Analyze') {
+            steps {
+                withSonarQubeEnv('My SonarQube Server') {
+                    sh 'mvn clean package sonar:sonar'
+                }
+            }
+        }
+        stage('Quality Gates') {
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
     }
 }
