@@ -1,0 +1,176 @@
+#+options: ':nil *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline author:t
+#+options: email:nil f:t inline:t num:t p:nil pri:nil prop:nil stat:t tags:t
+#+options: tasks:t tex:t timestamp:t title:t toc:nil todo:t |:t
+#+title: Jenkins & Sonar
+#+date: <2019-04-19 Fri>
+#+author: Colton Kopsa
+#+email: ckopsa@clearwateranalytics.com
+#+language: en
+#+select_tags: export
+#+exclude_tags: noexport
+#+creator: Emacs 26.1.92 (Org mode 9.2.2)
+
+* Overview
+  - What is Code Quality?
+  - Why is it important?
+  - How does it relate to Jenkins and Sonar?
+
+* Jenkins
+** Overview
+*** What is Jenkins?
+    - Continuous Integration Server
+      - Allows you to automate things that you want to have happen when code is
+        commited to a project.
+        - Build
+        - Run Tests
+        - Publish builds to Artifactory
+        - Deploy code to environments
+        - Notify relevant teams of success and failure
+*** How is it used at Clearwater?
+    - Talk about devbuild
+      - Look at an example of a project being built on the system
+        - Walk through the different phases that it traverses
+*** How does it affect me?
+    - When you want to commit code to a project Jenkins will:
+      - Makes sure the project builds
+      - Makes sure it passes its test suite
+        - Unit Tests
+        - Integration Tests
+        - PACT Tests
+      - Publish it to Artifactory
+      - Notify the team in charge of the project if it succeeds or fails.
+    - In order to have projects available on the system, they will need to be added to Jenkins:
+      - Projects created through versionmanager takes care of everything for you
+      - Adding a project manually can be useful though
+** Training
+   Resources:
+   - [[https://jenkins.io/doc/tutorials/build-a-multibranch-pipeline-project/][End-to-End Multibranch Pipeline Project Creation]]
+*** Requirements
+    - Docker
+    - Git
+*** Setting Up Jenkins
+    - (Overhead) Download & Run Docker Jenkins Blue Ocean Image
+**** MacOS/Linux
+     #+begin_src bash
+       docker run \
+              --rm \
+              -u root \
+              -p 8089:8080 \
+              -v jenkins-data:/var/jenkins_home \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$HOME":/home \
+              jenkinsci/blueocean
+     #+end_src
+**** Windows
+     #+begin_src bash
+       docker run ^
+       --rm ^
+       -u root ^
+       -p 8080:8080 ^
+       -v jenkins-data:/var/jenkins_home ^
+       -v /var/run/docker.sock:/var/run/docker.sock ^
+       -v "%HOMEPATH%":/home ^
+       jenkinsci/blueocean
+     #+end_src
+*** Building a Project with Jenkins
+    - Clone Starter Project
+    - Set up a JenkinsFile to build project
+      #+begin_src groovy
+        pipeline {
+            agent {
+                docker {
+                    image 'maven:3-alpine'
+                    args '-v /root/.m2:/root/.m2'
+                }
+            }
+            environment {
+                CI = 'true'
+            }
+            stages {
+                stage('Build') {
+                    steps {
+                        sh 'mvn clean install -B -e -DskipTests=true'
+                    }
+                }
+                stage('Test') {
+                    steps {
+                        sh 'mvn verify -e -Dmaven.test.failure.ignore=false'
+                    }
+                }
+            }
+        }
+      #+end_src
+    - Add a project to Jenkins
+      - Example: file:///home/dev/jenkinssonar
+    - Build project using Jenkins
+** Recap
+   - What is Jenkins?
+   - How is it used at Clearwater?
+     - Walk through typical Jenkins process
+       - Build, Test, Sonar, PACT Tests, Publish
+   - How do I use it?
+     - Add your project to have it built by Jenkins and have it be added to our
+       Artifactory
+
+* Sonar
+** Overview
+   - What is Sonar?
+   - How is it used at Clearwater?
+   - How does it affect me?
+** Training
+*** Requirements
+    - Maven
+    - Jenkins
+*** Setting Up Sonar
+    - (Overhead) Download and Run Docker Sonar Image
+    - Install Jenkins Sonar plugin
+      - Manage Jenkins -> Manage Plugins -> Available -> Filter Sonar -> Check Box -> Install without Restart -> Restart Jenkins when installation is complete and no jobs are running
+*** Adding a Project to Sonar
+    - Run mvn sonar:sonar
+*** Add Sonar to Jenkins
+*** Add Quality Gates
+*** Get Sonar to Yell at You
+*** Resolve Sonar Issues
+*** Experience the feelings of success when your build passes with flying colors
+
+
+* Final Jenkinsfile
+** Hints
+   Use the 192.***.***.*** IP address for sonar server and webhook.
+#+begin_src groovy
+  pipeline {
+      agent {
+          docker {
+              image 'maven:3-alpine'
+              args '-v /root/.m2:/root/.m2'
+          }
+      }
+
+      stages {
+          stage('Build') {
+              steps {
+                  sh 'mvn clean install -B -e -DskipTests=true'
+              }
+          }
+          stage('Test') {
+              steps {
+                  sh 'mvn verify -e -Dmaven.test.failure.ignore=false'
+              }
+          }
+          stage('Analyze') {
+              steps {
+                  withSonarQubeEnv('SonarQube') {
+                      sh 'mvn clean package sonar:sonar'
+                  }
+              }
+          }
+          stage('Quality Gates') {
+              steps {
+                  timeout(time: 1, unit: 'HOURS') {
+                      waitForQualityGate abortPipeline: true
+                  }
+              }
+          }
+      }
+  }
+#+end_src
