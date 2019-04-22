@@ -12,5 +12,10 @@ pipeline {
                 sh 'mvn clean install -B -e -DskipTests=true'
             }
         }
+        stage('Test') {
+            steps {
+                sh 'mvn verify -e -Dmaven.test.failure.ignore=false'
+            }
+        }
     }
 }
